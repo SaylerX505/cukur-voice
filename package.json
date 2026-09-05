@@ -1,1 +1,19 @@
-{"name":"cukur-voice","version":"1.0.0","description":"Professional temporary voice channel manager for Discord.","main":"src/index.js","scripts":{"start":"node src/index.js","dev":"node --watch src/index.js"},"engines":{"node":">=20.0.0"},"dependencies":{"better-sqlite3":"^11.10.0","discord.js":"^14.24.2","dotenv":"^17.2.1"},"license":"MIT"}
+{
+  "name": "cukur-voice",
+  "version": "1.1.0-test",
+  "description": "Professional Discord temporary voice channel manager.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.10.0",
+    "discord.js": "^14.24.2",
+    "dotenv": "^17.2.1"
+  },
+  "license": "MIT"
+}

@@ -1,30 +1,64 @@
 # Cukur Voice
 
-A professional Discord temporary voice channel manager built with JavaScript and discord.js v14.
+A Discord-native temporary voice manager built with JavaScript and discord.js v14. No dashboard, no web server, no external control panel.
 
-## Core features
-- Automatic temporary rooms from a generator channel.
-- Automatic cleanup when rooms become empty.
-- Persistent SQLite state using better-sqlite3.
-- Owner transfer when the current owner leaves.
-- `/setup` creates the category and generator automatically.
-- `/voice` controls: rename, limit, lock, unlock, hide, show, claim, permit, reject, kick, info.
-- Interactive control panel via `/interface`.
-- Custom Discord application emojis with Unicode fallbacks.
-- Guild-scoped configuration, so multiple servers can use the same bot.
+## Test release features
+
+- Temporary voice rooms from the generator and optional waiting-room trigger.
+- Automatic empty-room cleanup and startup stale-room reconciliation.
+- Persistent SQLite state with safe migration from the previous release.
+- Automatic owner transfer when the owner leaves while members remain.
+- Manual `/voice transfer` and `/voice claim` ownership controls.
+- Owner controls: rename, limit, lock, unlock, hide, show, permit, reject, kick, disconnect, delete and info.
+- Voice bitrate and RTC region controls.
+- Optional private temporary text channel for every room.
+- Optional temporary voice role with automatic cleanup/transfer tracking.
+- Configurable room-name templates using `{user}` and `{username}`.
+- Configurable default limit, bitrate and region.
+- Optional audit log channel.
+- Moderator override through Manage Channels.
+- Three-row interactive `/interface` panel with Discord application emoji support and Unicode fallbacks.
+- `/setup` creates/repairs the main category, generator and waiting room.
+- Multi-server configuration with guild-scoped SQLite data.
 
 ## Setup
 
-1. Install Node.js 20+.
-2. Copy `.env.example` to `.env` and fill in `DISCORD_TOKEN` and `CLIENT_ID`.
-3. Optional: set `DEV_GUILD_ID` for instant command registration in one development server. Leave it blank for global commands.
-4. Create custom application emojis in Discord Developer Portal and paste their IDs into the `EMOJI_*` variables. The bot automatically renders them in the panel; leaving an ID blank uses a Unicode fallback.
+1. Use Node.js 20+.
+2. Copy `.env.example` to `.env`.
+3. Fill `DISCORD_TOKEN` and `CLIENT_ID`.
+4. Optionally set `DEV_GUILD_ID` for instant command registration during testing.
 5. Run `npm install` then `npm start`.
-6. Invite the bot with the `bot` and `applications.commands` scopes. It needs Manage Channels, Move Members, View Channels, Connect, Speak, Send Messages, Embed Links and Use Application Commands. Administrator is not required.
-7. Run `/setup` in each server.
+6. Invite the bot with `bot` and `applications.commands` scopes.
+7. Minimum practical permissions: Manage Channels, Move Members, View Channels, Connect, Speak, Send Messages, Embed Links and Use Application Commands. Administrator is not required.
+8. Run `/setup` in each server.
+9. Run `/interface` to post the control panel.
 
-## Design
+## Configuration
 
-The project intentionally keeps the first release dashboard-free and Discord-native. The architecture leaves room for a future web dashboard, templates, voice roles, private text chats, waiting rooms, audit logs and more without rewriting the core temporary-channel engine.
+`/config logs #channel` enables audit logging.
 
-Inspired by the best patterns in Astro and VoiceMaster-style temporary voice systems: generator channels, owner controls, automatic cleanup and an interface panel. Astro documents the same generator/owner/interface model and advanced extensions such as voice roles, templates and waiting rooms.
+`/config text true` enables automatic private text channels for new rooms.
+
+`/config waiting-room <voice>` makes the selected voice channel another room-creation trigger.
+
+`/config voice-role @Role` assigns that role to the current room owner and tracks it for cleanup/transfer.
+
+`/config template {user}'s Room` changes the default room name. `{user}` becomes the display name and `{username}` becomes the Discord username.
+
+`/config limit 0`, `/config bitrate 64`, and `/config region auto` set defaults for newly created rooms.
+
+## Owner commands
+
+`/voice rename`, `limit`, `lock`, `unlock`, `hide`, `show`, `claim`, `transfer`, `permit`, `reject`, `kick`, `disconnect`, `bitrate`, `region`, `text`, `delete`, `info`.
+
+The interactive panel exposes the most-used controls. Commands remain available for actions that need a user/channel/role argument.
+
+## Custom emojis
+
+Create application emojis in the Discord Developer Portal and put their IDs in the `EMOJI_*` variables in `.env`. If an ID is blank, Cukur Voice automatically uses a Unicode fallback.
+
+## Architecture
+
+The bot remains intentionally Discord-native. SQLite is the persistence layer, discord.js handles Discord state, and the temporary-room engine is isolated from the interaction layer. This makes the project ready for future Discord-native extensions such as richer templates, additional room policies, waiting-room workflows and more without introducing a dashboard.
+
+This test release is designed to be run and tested directly on a Discord server before further hardening.

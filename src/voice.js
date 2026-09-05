@@ -1,62 +1,27 @@
-const { ChannelType, PermissionFlagsBits } = require('discord.js');
+const { ChannelType, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const db = require('./database');
+const config = require('./config');
 
-async function createTemp(newState, guildConfig) {
-  const member = newState.member;
-  const category = newState.guild.channels.cache.get(guildConfig.category_id);
-  if (!category) return null;
-  const safeName = `${member.displayName}'s Room`.slice(0, 100);
-  const channel = await newState.guild.channels.create({
-    name: safeName,
-    type: ChannelType.GuildVoice,
-    parent: category.id,
-    userLimit: 0,
-    reason: `Cukur Voice room for ${member.user.tag}`,
-    permissionOverwrites: [
-      { id: newState.guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect] },
-      { id: member.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect, PermissionFlagsBits.Speak, PermissionFlagsBits.ManageChannels] }
-    ]
-  });
-  db.addTemp(channel.id, newState.guild.id, member.id, guildConfig.generator_id);
-  await member.voice.setChannel(channel, 'Cukur Voice room created');
-  return channel;
+function renderName(template, member) { return template.replaceAll('{user}', member.displayName).replaceAll('{username}', member.user.username).slice(0, 100); }
+async function logEvent(guild,title,description){ const cfg=db.getGuild(guild.id); if(!cfg?.log_channel_id)return; const channel=guild.channels.cache.get(cfg.log_channel_id); if(!channel?.isTextBased())return; await channel.send({embeds:[new EmbedBuilder().setTitle(title).setDescription(description).setTimestamp()]}).catch(()=>{}); }
+function roomPermissions(guild,ownerId){ return [
+  {id:guild.roles.everyone.id,allow:[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.Connect]},
+  {id:ownerId,allow:[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.Connect,PermissionFlagsBits.Speak,PermissionFlagsBits.ManageChannels]}
+]; }
+async function createTextChannel(guild,category,member){ return guild.channels.create({name:`text-${member.user.username}`.slice(0,100),type:ChannelType.GuildText,parent:category.id,reason:'Cukur Voice private room text',permissionOverwrites:[{id:guild.roles.everyone.id,deny:[PermissionFlagsBits.ViewChannel]},{id:member.id,allow:[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages,PermissionFlagsBits.ReadMessageHistory]}]}); }
+async function createTemp(newState,guildConfig){
+  const member=newState.member, category=newState.guild.channels.cache.get(guildConfig.category_id); if(!category)return null;
+  const channel=await newState.guild.channels.create({name:renderName(guildConfig.room_template||config.defaults.roomTemplate,member),type:ChannelType.GuildVoice,parent:category.id,userLimit:guildConfig.default_limit||0,bitrate:Math.min(guildConfig.default_bitrate||64000,newState.guild.maximumBitrate||64000),rtcRegion:guildConfig.default_region||null,reason:`Cukur Voice room for ${member.user.tag}`,permissionOverwrites:roomPermissions(newState.guild,member.id)});
+  let textChannel=null; if(guildConfig.text_enabled) textChannel=await createTextChannel(newState.guild,category,member).catch(()=>null);
+  db.addTemp(channel.id,newState.guild.id,member.id,guildConfig.generator_id,textChannel?.id||null);
+  if(guildConfig.voice_role_id){ const role=newState.guild.roles.cache.get(guildConfig.voice_role_id); if(role?.editable) await member.roles.add(role,'Cukur Voice temporary room').then(()=>db.addRoleAssignment(channel.id,member.id,role.id)).catch(()=>{}); }
+  try{ await member.voice.setChannel(channel,'Cukur Voice room created'); }catch(error){ await deleteTemp(channel,'Failed to move member into room'); throw error; }
+  await logEvent(newState.guild,'Temporary room created',`${member} created ${channel}${textChannel?` with ${textChannel}`:''}.`); return channel;
 }
-
-async function cleanup(channel, client) {
-  const temp = db.getTemp(channel.id);
-  if (!temp) return;
-  if (channel.members.size > 0) return;
-  db.removeTemp(channel.id);
-  await channel.delete('Cukur Voice room became empty').catch(()=>{});
-}
-
-async function transferOwner(channel, oldOwnerId) {
-  const temp = db.getTemp(channel.id);
-  if (!temp || temp.owner_id !== oldOwnerId || channel.members.size === 0) return;
-  const next = channel.members.first();
-  if (!next) return;
-  db.addTemp(channel.id, channel.guild.id, next.id, temp.generator_id);
-  await channel.permissionOverwrites.edit(next.id, { ViewChannel: true, Connect: true, Speak: true, ManageChannels: true }).catch(()=>{});
-}
-
-async function handleVoiceState(oldState, newState) {
-  if (oldState.channelId === newState.channelId) return;
-  const guild = newState.guild || oldState.guild;
-  const cfg = db.getGuild(guild.id);
-
-  if (newState.channelId && cfg && newState.channelId === cfg.generator_id) {
-    if (newState.member.user.bot) return;
-    await createTemp(newState, cfg);
-  }
-
-  if (oldState.channelId) {
-    const oldChannel = oldState.guild.channels.cache.get(oldState.channelId);
-    if (oldChannel) {
-      const temp = db.getTemp(oldChannel.id);
-      if (temp && temp.owner_id === oldState.member.id) await transferOwner(oldChannel, oldState.member.id);
-      await cleanup(oldChannel);
-    }
-  }
-}
-
-module.exports = { handleVoiceState };
+async function deleteTemp(channel,reason='Cukur Voice room deleted'){ const temp=db.getTemp(channel.id); if(!temp)return false; const guild=channel.guild; for(const a of db.listRoleAssignments(channel.id)){const member=guild.members.cache.get(a.user_id),role=guild.roles.cache.get(a.role_id);if(member&&role)await member.roles.remove(role,'Cukur Voice room cleanup').catch(()=>{});} const text=temp.text_channel_id?guild.channels.cache.get(temp.text_channel_id):null; db.removeTemp(channel.id); if(text)await text.delete(reason).catch(()=>{}); await channel.delete(reason).catch(()=>{}); await logEvent(guild,'Temporary room deleted',`${channel.name} was deleted. Reason: ${reason}.`); return true; }
+async function syncOwner(channel,oldOwnerId,newOwner){ if(!newOwner)return false; const temp=db.getTemp(channel.id); if(!temp)return false; db.addTemp(channel.id,channel.guild.id,newOwner.id,temp.generator_id,temp.text_channel_id); await channel.permissionOverwrites.edit(newOwner.id,{ViewChannel:true,Connect:true,Speak:true,ManageChannels:true}).catch(()=>{}); if(temp.text_channel_id){const text=channel.guild.channels.cache.get(temp.text_channel_id);if(text){await text.permissionOverwrites.edit(newOwner.id,{ViewChannel:true,SendMessages:true,ReadMessageHistory:true}).catch(()=>{});if(oldOwnerId)await text.permissionOverwrites.delete(oldOwnerId).catch(()=>{});}} const cfg=db.getGuild(channel.guild.id); if(cfg?.voice_role_id){const role=channel.guild.roles.cache.get(cfg.voice_role_id),oldMember=channel.guild.members.cache.get(oldOwnerId);if(oldMember&&role)await oldMember.roles.remove(role,'Cukur Voice ownership transfer').catch(()=>{});if(role?.editable)await newOwner.roles.add(role,'Cukur Voice ownership transfer').then(()=>db.addRoleAssignment(channel.id,newOwner.id,role.id)).catch(()=>{});} await logEvent(channel.guild,'Room ownership transferred',`${newOwner} is now the owner of ${channel}.`); return true; }
+async function transferOwner(channel,oldOwnerId,newOwner){const temp=db.getTemp(channel.id);if(!temp||!newOwner)return false;if(oldOwnerId&&temp.owner_id!==oldOwnerId&&temp.owner_id!==newOwner.id)return false;return syncOwner(channel,oldOwnerId,newOwner);}
+async function cleanup(channel){const temp=db.getTemp(channel.id);if(!temp||channel.members.size>0)return;await deleteTemp(channel,'Room became empty');}
+async function reconcile(client){for(const cfg of db.listGuilds()){const guild=client.guilds.cache.get(cfg.guild_id);if(!guild)continue;for(const temp of db.listTemps(cfg.guild_id)){const channel=guild.channels.cache.get(temp.channel_id);if(!channel){db.removeTemp(temp.channel_id);continue;}if(channel.members.size===0)await deleteTemp(channel,'Stale room cleanup');}}}
+async function handleVoiceState(oldState,newState){if(oldState.channelId===newState.channelId)return;const guild=newState.guild||oldState.guild,cfg=db.getGuild(guild.id);if(!cfg)return;if(newState.channelId&&(newState.channelId===cfg.generator_id||newState.channelId===cfg.waiting_room_id)&&!newState.member.user.bot)await createTemp(newState,cfg);if(oldState.channelId){const oldChannel=oldState.guild.channels.cache.get(oldState.channelId);if(oldChannel){const temp=db.getTemp(oldChannel.id);if(temp&&temp.owner_id===oldState.member.id&&oldChannel.members.size>0)await transferOwner(oldChannel,oldState.member.id,oldChannel.members.first());await cleanup(oldChannel);}}}
+module.exports={handleVoiceState,createTemp,deleteTemp,transferOwner,logEvent,reconcile};

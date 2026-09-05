@@ -1,10 +1,10 @@
-const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
+const { ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 
-async function open(interaction, action) {
-  const modal = new ModalBuilder().setCustomId(`cvmodal:${action}`).setTitle(action === 'rename' ? 'Rename room' : 'Set member limit');
-  const input = new TextInputBuilder().setCustomId('value').setLabel(action === 'rename' ? 'Channel name' : 'Limit (0-99)').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(action === 'rename' ? 100 : 2);
-  modal.addComponents(new ActionRowBuilder().addComponents(input));
-  await interaction.showModal(modal);
+function open(interaction, action) {
+  const labels = { rename: ['Rename room','New channel name'], limit: ['Member limit','0 = unlimited'], bitrate: ['Bitrate','8-384 kbps'], region: ['Voice region','Use auto or a Discord region such as us-east'] };
+  const [title, placeholder] = labels[action] || ['Cukur Voice','Value'];
+  const input = new TextInputBuilder().setCustomId('value').setLabel(placeholder).setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(action === 'rename' ? 100 : 32);
+  return interaction.showModal(new ModalBuilder().setCustomId(`cvmodal:${action}`).setTitle(title).addComponents(new ActionRowBuilder().addComponents(input)));
 }
 
 module.exports = { open };
