@@ -31,17 +31,7 @@ async function registerCommands(client){
 async function setup(guild){
   const me=await guild.members.fetch({user:guild.client.user.id,force:true});
   const permissions=me.permissions;
-  const hasAdministrator=permissions.has(PermissionFlagsBits.Administrator);
-  const missing=[];
-  if(!hasAdministrator&&!permissions.has(PermissionFlagsBits.ViewChannel))missing.push('View Channels');
-  if(!hasAdministrator&&!permissions.has(PermissionFlagsBits.ManageChannels))missing.push('Manage Channels');
-  if(!hasAdministrator&&!permissions.has(PermissionFlagsBits.MoveMembers))missing.push('Move Members');
-  if(missing.length){
-    const error=new Error(`Cukur Voice is missing required bot permissions: ${missing.join(', ')}. Give the bot these permissions (or Administrator) and run /setup again.`);
-    error.code='CV_MISSING_PERMISSIONS';
-    error.missingPermissions=missing;
-    throw error;
-  }
+  console.log(`[Cukur Voice] /setup permissions: administrator=${permissions.has(PermissionFlagsBits.Administrator)} manageChannels=${permissions.has(PermissionFlagsBits.ManageChannels)} viewChannel=${permissions.has(PermissionFlagsBits.ViewChannel)} moveMembers=${permissions.has(PermissionFlagsBits.MoveMembers)} bitfield=${permissions.bitfield.toString()}`);
 
   let cfg=db.getGuild(guild.id),category=cfg&&guild.channels.cache.get(cfg.category_id),generator=cfg&&guild.channels.cache.get(cfg.generator_id),waiting=cfg&&cfg.waiting_room_id&&guild.channels.cache.get(cfg.waiting_room_id),interfaceChannel=cfg&&cfg.interface_channel_id&&guild.channels.cache.get(cfg.interface_channel_id);
   if(!category||category.type!==ChannelType.GuildCategory)category=await guild.channels.create({name:'Temporary Voice',type:ChannelType.GuildCategory,reason:'Cukur Voice setup'});
