@@ -1,16 +1,133 @@
-const fs=require('node:fs');
-const path=require('node:path');
-const Database=require('better-sqlite3');
-const config=require('./config');
-fs.mkdirSync(path.dirname(config.databasePath),{recursive:true});
-const db=new Database(config.databasePath);db.pragma('journal_mode = WAL');db.pragma('foreign_keys = ON');
-db.exec(`CREATE TABLE IF NOT EXISTS guilds(guild_id TEXT PRIMARY KEY,category_id TEXT,generator_id TEXT,interface_channel_id TEXT,waiting_room_id TEXT,log_channel_id TEXT,voice_role_id TEXT,text_enabled INTEGER NOT NULL DEFAULT 0,room_template TEXT NOT NULL DEFAULT '{user}''s Room',default_limit INTEGER NOT NULL DEFAULT 0,default_bitrate INTEGER NOT NULL DEFAULT 64000,default_region TEXT,created_at INTEGER NOT NULL);CREATE TABLE IF NOT EXISTS temp_channels(channel_id TEXT PRIMARY KEY,guild_id TEXT NOT NULL,owner_id TEXT NOT NULL,generator_id TEXT NOT NULL,text_channel_id TEXT,created_at INTEGER NOT NULL);CREATE TABLE IF NOT EXISTS permissions(channel_id TEXT NOT NULL,user_id TEXT NOT NULL,type TEXT NOT NULL,PRIMARY KEY(channel_id,user_id,type),FOREIGN KEY(channel_id) REFERENCES temp_channels(channel_id) ON DELETE CASCADE);CREATE TABLE IF NOT EXISTS role_assignments(channel_id TEXT NOT NULL,user_id TEXT NOT NULL,role_id TEXT NOT NULL,PRIMARY KEY(channel_id,user_id,role_id),FOREIGN KEY(channel_id) REFERENCES temp_channels(channel_id) ON DELETE CASCADE);`);
-function columns(table){return new Set(db.prepare(`PRAGMA table_info(${table})`).all().map(x=>x.name));}function addColumn(table,name,sql){if(!columns(table).has(name))db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${sql}`);}
-addColumn('guilds','waiting_room_id','TEXT');addColumn('guilds','log_channel_id','TEXT');addColumn('guilds','voice_role_id','TEXT');addColumn('guilds','text_enabled','INTEGER NOT NULL DEFAULT 0');addColumn('guilds','room_template',"TEXT NOT NULL DEFAULT '{user}''s Room'");addColumn('guilds','default_limit','INTEGER NOT NULL DEFAULT 0');addColumn('guilds','default_bitrate','INTEGER NOT NULL DEFAULT 64000');addColumn('guilds','default_region','TEXT');addColumn('temp_channels','text_channel_id','TEXT');
-const api={
- listGuilds:()=>db.prepare('SELECT * FROM guilds').all(),getGuild:id=>db.prepare('SELECT * FROM guilds WHERE guild_id=?').get(id),
- upsertGuild:(id,patch={})=>{const current=api.getGuild(id);const d={category_id:patch.category_id??current?.category_id??null,generator_id:patch.generator_id??current?.generator_id??null,interface_channel_id:patch.interface_channel_id??current?.interface_channel_id??null,waiting_room_id:patch.waiting_room_id??current?.waiting_room_id??null,log_channel_id:patch.log_channel_id??current?.log_channel_id??null,voice_role_id:patch.voice_role_id??current?.voice_role_id??null,text_enabled:patch.text_enabled??current?.text_enabled??0,room_template:patch.room_template??current?.room_template??config.defaults.roomTemplate,default_limit:patch.default_limit??current?.default_limit??config.defaults.userLimit,default_bitrate:patch.default_bitrate??current?.default_bitrate??config.defaults.bitrate,default_region:patch.default_region??current?.default_region??config.defaults.region};if(!current)return db.prepare(`INSERT INTO guilds(guild_id,category_id,generator_id,interface_channel_id,waiting_room_id,log_channel_id,voice_role_id,text_enabled,room_template,default_limit,default_bitrate,default_region,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id,d.category_id,d.generator_id,d.interface_channel_id,d.waiting_room_id,d.log_channel_id,d.voice_role_id,d.text_enabled,d.room_template,d.default_limit,d.default_bitrate,d.default_region,Date.now());return db.prepare(`UPDATE guilds SET category_id=?,generator_id=?,interface_channel_id=?,waiting_room_id=?,log_channel_id=?,voice_role_id=?,text_enabled=?,room_template=?,default_limit=?,default_bitrate=?,default_region=? WHERE guild_id=?`).run(d.category_id,d.generator_id,d.interface_channel_id,d.waiting_room_id,d.log_channel_id,d.voice_role_id,d.text_enabled,d.room_template,d.default_limit,d.default_bitrate,d.default_region,id);},
- getTemp:id=>db.prepare('SELECT * FROM temp_channels WHERE channel_id=?').get(id),
- addTemp:(channelId,guildId,ownerId,generatorId,textChannelId=null)=>db.prepare(`INSERT INTO temp_channels(channel_id,guild_id,owner_id,generator_id,text_channel_id,created_at) VALUES(?,?,?,?,?,?) ON CONFLICT(channel_id) DO UPDATE SET guild_id=excluded.guild_id,owner_id=excluded.owner_id,generator_id=excluded.generator_id,text_channel_id=excluded.text_channel_id`).run(channelId,guildId,ownerId,generatorId,textChannelId,Date.now()),
- setTempText:(channelId,textId)=>db.prepare('UPDATE temp_channels SET text_channel_id=? WHERE channel_id=?').run(textId,channelId),removeTemp:id=>db.prepare('DELETE FROM temp_channels WHERE channel_id=?').run(id),listTemps:guildId=>db.prepare('SELECT * FROM temp_channels WHERE guild_id=?').all(guildId),addPermission:(channelId,userId,type)=>db.prepare('INSERT OR REPLACE INTO permissions VALUES(?,?,?)').run(channelId,userId,type),removePermission:(channelId,userId,type)=>db.prepare('DELETE FROM permissions WHERE channel_id=? AND user_id=? AND type=?').run(channelId,userId,type),listPermissions:channelId=>db.prepare('SELECT * FROM permissions WHERE channel_id=?').all(channelId),addRoleAssignment:(channelId,userId,roleId)=>db.prepare('INSERT OR REPLACE INTO role_assignments VALUES(?,?,?)').run(channelId,userId,roleId),listRoleAssignments:channelId=>db.prepare('SELECT * FROM role_assignments WHERE channel_id=?').all(channelId),close:()=>db.close()
-};module.exports=api;
+const fs = require('node:fs');
+const path = require('node:path');
+const config = require('./config');
+
+// Wispbyte/Node 22 compatible storage: pure Node.js JSON, no native SQLite bindings.
+fs.mkdirSync(path.dirname(config.databasePath), { recursive: true });
+
+const filePath = config.databasePath.endsWith('.json')
+  ? config.databasePath
+  : config.databasePath.replace(/\.(db|sqlite3?)$/i, '.json');
+
+const empty = {
+  guilds: {},
+  temp_channels: {},
+  permissions: [],
+  role_assignments: []
+};
+
+function load() {
+  try {
+    if (!fs.existsSync(filePath)) return structuredClone(empty);
+    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    return {
+      guilds: parsed.guilds || {},
+      temp_channels: parsed.temp_channels || {},
+      permissions: Array.isArray(parsed.permissions) ? parsed.permissions : [],
+      role_assignments: Array.isArray(parsed.role_assignments) ? parsed.role_assignments : []
+    };
+  } catch {
+    return structuredClone(empty);
+  }
+}
+
+let data = load();
+
+function save() {
+  const tempPath = `${filePath}.tmp`;
+  fs.writeFileSync(tempPath, JSON.stringify(data, null, 2));
+  fs.renameSync(tempPath, filePath);
+}
+
+function guildDefaults(id, patch = {}, current = null) {
+  return {
+    guild_id: id,
+    category_id: patch.category_id ?? current?.category_id ?? null,
+    generator_id: patch.generator_id ?? current?.generator_id ?? null,
+    interface_channel_id: patch.interface_channel_id ?? current?.interface_channel_id ?? null,
+    waiting_room_id: patch.waiting_room_id ?? current?.waiting_room_id ?? null,
+    log_channel_id: patch.log_channel_id ?? current?.log_channel_id ?? null,
+    voice_role_id: patch.voice_role_id ?? current?.voice_role_id ?? null,
+    text_enabled: patch.text_enabled ?? current?.text_enabled ?? 0,
+    room_template: patch.room_template ?? current?.room_template ?? config.defaults.roomTemplate,
+    default_limit: patch.default_limit ?? current?.default_limit ?? config.defaults.userLimit,
+    default_bitrate: patch.default_bitrate ?? current?.default_bitrate ?? config.defaults.bitrate,
+    default_region: patch.default_region ?? current?.default_region ?? config.defaults.region,
+    created_at: current?.created_at ?? Date.now()
+  };
+}
+
+const api = {
+  listGuilds: () => Object.values(data.guilds),
+
+  getGuild: id => data.guilds[id] || undefined,
+
+  upsertGuild: (id, patch = {}) => {
+    const current = api.getGuild(id);
+    data.guilds[id] = guildDefaults(id, patch, current);
+    save();
+    return data.guilds[id];
+  },
+
+  getTemp: id => data.temp_channels[id] || undefined,
+
+  addTemp: (channelId, guildId, ownerId, generatorId, textChannelId = null) => {
+    data.temp_channels[channelId] = {
+      channel_id: channelId,
+      guild_id: guildId,
+      owner_id: ownerId,
+      generator_id: generatorId,
+      text_channel_id: textChannelId,
+      created_at: data.temp_channels[channelId]?.created_at ?? Date.now()
+    };
+    save();
+    return data.temp_channels[channelId];
+  },
+
+  setTempText: (channelId, textId) => {
+    if (!data.temp_channels[channelId]) return { changes: 0 };
+    data.temp_channels[channelId].text_channel_id = textId;
+    save();
+    return { changes: 1 };
+  },
+
+  removeTemp: id => {
+    if (!data.temp_channels[id]) return { changes: 0 };
+    delete data.temp_channels[id];
+    data.permissions = data.permissions.filter(x => x.channel_id !== id);
+    data.role_assignments = data.role_assignments.filter(x => x.channel_id !== id);
+    save();
+    return { changes: 1 };
+  },
+
+  listTemps: guildId => Object.values(data.temp_channels).filter(x => x.guild_id === guildId),
+
+  addPermission: (channelId, userId, type) => {
+    const exists = data.permissions.some(x => x.channel_id === channelId && x.user_id === userId && x.type === type);
+    if (!exists) data.permissions.push({ channel_id: channelId, user_id: userId, type });
+    save();
+    return { changes: exists ? 0 : 1 };
+  },
+
+  removePermission: (channelId, userId, type) => {
+    const before = data.permissions.length;
+    data.permissions = data.permissions.filter(x => !(x.channel_id === channelId && x.user_id === userId && x.type === type));
+    save();
+    return { changes: before - data.permissions.length };
+  },
+
+  listPermissions: channelId => data.permissions.filter(x => x.channel_id === channelId),
+
+  addRoleAssignment: (channelId, userId, roleId) => {
+    const exists = data.role_assignments.some(x => x.channel_id === channelId && x.user_id === userId && x.role_id === roleId);
+    if (!exists) data.role_assignments.push({ channel_id: channelId, user_id: userId, role_id: roleId });
+    save();
+    return { changes: exists ? 0 : 1 };
+  },
+
+  listRoleAssignments: channelId => data.role_assignments.filter(x => x.channel_id === channelId),
+
+  close: () => save()
+};
+
+module.exports = api;
