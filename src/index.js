@@ -30,7 +30,9 @@ client.once(Events.ClientReady, async readyClient => {
   }
 });
 
-client.on('VoiceStateUpdate', async (oldState, newState) => {
+// Discord.js event names are case-sensitive. Use the Events constants so
+// interaction and voice-state handlers actually receive Discord events.
+client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
   try {
     await handleVoiceState(oldState, newState);
   } catch (error) {
@@ -38,7 +40,7 @@ client.on('VoiceStateUpdate', async (oldState, newState) => {
   }
 });
 
-client.on('InteractionCreate', async interaction => {
+client.on(Events.InteractionCreate, async interaction => {
   try {
     await handleInteraction(interaction);
   } catch (error) {
