@@ -9,15 +9,14 @@ A Discord-native temporary voice manager built with JavaScript and discord.js v1
 - Persistent SQLite state with safe migration from the previous release.
 - Automatic owner transfer when the owner leaves while members remain.
 - Manual `/voice transfer` and `/voice claim` ownership controls.
-- Owner controls: rename, limit, lock, unlock, hide, show, permit, reject, kick, disconnect, delete and info.
-- Voice bitrate and RTC region controls.
+- Owner controls: rename, limit, lock, unlock, hide, show, trust, block, kick, disconnect, delete and info.
 - Optional private temporary text channel for every room.
 - Optional temporary voice role with automatic cleanup/transfer tracking.
 - Configurable room-name templates using `{user}` and `{username}`.
-- Configurable default limit, bitrate and region.
+- Configurable default limit.
 - Optional audit log channel.
 - Moderator override through Manage Channels.
-- Three-row interactive `/interface` panel with Discord application emoji support and Unicode fallbacks.
+- Six-row interactive `/interface` panel with Discord application emoji support and Unicode fallbacks.
 - `/setup` creates/repairs the main category, generator and waiting room.
 - Multi-server configuration with guild-scoped SQLite data.
 
@@ -45,13 +44,13 @@ A Discord-native temporary voice manager built with JavaScript and discord.js v1
 
 `/config template {user}'s Room` changes the default room name. `{user}` becomes the display name and `{username}` becomes the Discord username.
 
-`/config limit 0`, `/config bitrate 64`, and `/config region auto` set defaults for newly created rooms.
+`/config limit 0` sets the default room limit for newly created rooms.
 
 ## Owner commands
 
-`/voice rename`, `limit`, `lock`, `unlock`, `hide`, `show`, `claim`, `transfer`, `permit`, `reject`, `kick`, `disconnect`, `bitrate`, `region`, `text`, `delete`, `info`.
+`/voice rename`, `limit`, `lock`, `unlock`, `hide`, `show`, `claim`, `transfer`, `trust`, `block`, `kick`, `disconnect`, `text`, `delete`, `info`.
 
-The interactive panel exposes the most-used controls. Commands remain available for actions that need a user/channel/role argument.
+The interactive panel exposes the most-used controls. Trust and Block are toggles, and Disconnect accepts multiple members in one selection.
 
 ## Custom emojis
 

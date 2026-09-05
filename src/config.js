@@ -16,16 +16,14 @@ module.exports = {
   databasePath: path.join(process.cwd(), 'data', 'cukur.sqlite'),
   defaults: {
     roomTemplate: process.env.DEFAULT_ROOM_TEMPLATE || "{user}'s Room",
-    userLimit: Number(process.env.DEFAULT_ROOM_LIMIT || 0),
-    bitrate: Number(process.env.DEFAULT_BITRATE || 64000),
-    region: process.env.DEFAULT_REGION || null
+    userLimit: Number(process.env.DEFAULT_ROOM_LIMIT || 0)
   },
   emojis: {
     settings: emoji('SETTINGS', '⚙️'), lock: emoji('LOCK', '🔒'), unlock: emoji('UNLOCK', '🔓'),
     hide: emoji('HIDE', '👁️'), show: emoji('SHOW', '👁️'), rename: emoji('RENAME', '✏️'),
-    limit: emoji('LIMIT', '👥'), permit: emoji('PERMIT', '➕'), reject: emoji('REJECT', '➖'),
+    limit: emoji('LIMIT', '👥'), trust: emoji('TRUST', '➕'), block: emoji('BLOCK', '➖'),
     claim: emoji('CLAIM', '👑'), transfer: emoji('TRANSFER', '🔁'), disconnect: emoji('DISCONNECT', '⛔'),
     delete: emoji('DELETE', '🗑️'), invite: emoji('INVITE', '🔗'), info: emoji('INFO', 'ℹ️'),
-    setup: emoji('SETUP', '🛠️'), bitrate: emoji('BITRATE', '🎚️'), region: emoji('REGION', '🌐'), text: emoji('TEXT', '💬')
+    setup: emoji('SETUP', '🛠️'), text: emoji('TEXT', '💬')
   }
 };

@@ -51,8 +51,6 @@ function guildDefaults(id, patch = {}, current = null) {
     text_enabled: patch.text_enabled ?? current?.text_enabled ?? 0,
     room_template: patch.room_template ?? current?.room_template ?? config.defaults.roomTemplate,
     default_limit: patch.default_limit ?? current?.default_limit ?? config.defaults.userLimit,
-    default_bitrate: patch.default_bitrate ?? current?.default_bitrate ?? config.defaults.bitrate,
-    default_region: patch.default_region ?? current?.default_region ?? config.defaults.region,
     created_at: current?.created_at ?? Date.now()
   };
 }
