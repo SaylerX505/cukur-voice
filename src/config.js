@@ -9,6 +9,8 @@ function emoji(name, fallback) {
 module.exports = {
   token: process.env.DISCORD_TOKEN,
   clientId: process.env.CLIENT_ID,
+  // Optional: when set, commands are registered to one guild for instant development updates.
+  // When omitted, commands are registered globally. No Guild ID is required.
   devGuildId: process.env.DEV_GUILD_ID || null,
   botName: process.env.BOT_NAME || 'Cukur Voice',
   databasePath: path.join(process.cwd(), 'data', 'cukur.sqlite'),
