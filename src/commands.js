@@ -29,10 +29,13 @@ async function registerCommands(client){
 }
 
 async function setup(guild){
-  const me=guild.members.me||await guild.members.fetchMe();
+  const me=await guild.members.fetch({user:guild.client.user.id,force:true});
+  const permissions=me.permissions;
+  const hasAdministrator=permissions.has(PermissionFlagsBits.Administrator);
   const missing=[];
-  if(!me.permissions.has(PermissionFlagsBits.ViewChannel))missing.push('View Channels');
-  if(!me.permissions.has(PermissionFlagsBits.ManageChannels))missing.push('Manage Channels');
+  if(!hasAdministrator&&!permissions.has(PermissionFlagsBits.ViewChannel))missing.push('View Channels');
+  if(!hasAdministrator&&!permissions.has(PermissionFlagsBits.ManageChannels))missing.push('Manage Channels');
+  if(!hasAdministrator&&!permissions.has(PermissionFlagsBits.MoveMembers))missing.push('Move Members');
   if(missing.length){
     const error=new Error(`Cukur Voice is missing required bot permissions: ${missing.join(', ')}. Give the bot these permissions (or Administrator) and run /setup again.`);
     error.code='CV_MISSING_PERMISSIONS';
